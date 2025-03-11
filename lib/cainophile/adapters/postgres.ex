@@ -45,6 +45,7 @@ defmodule Cainophile.Adapters.Postgres do
 
   @impl true
   def init(config) do
+    Process.flag(:trap_exit, true)
     adapter_impl(config).init(config)
   end
 
@@ -57,10 +58,24 @@ defmodule Cainophile.Adapters.Postgres do
     {:noreply, process_message(decoded, state)}
   end
 
+  # Logs when a supervised process crashes
+  @impl GenServer
+  def handle_info({:EXIT, pid, reason}, state) do
+    Logger.error("Process #{inspect(pid)} crashed: #{inspect(reason)}")
+    {:noreply, state}
+  end
+
   @impl true
   def handle_info(msg, state) do
     IO.inspect(msg)
     {:noreply, state}
+  end
+
+  @impl GenServer
+  def terminate(reason, state) do
+    Logger.error(
+      "GenServer Cainophile.Adapters.Postgres terminating. Reason: #{inspect(reason)}, State: #{inspect(state)}"
+    )
   end
 
   # TODO: Extract subscription logic into common module for other adapters
@@ -182,12 +197,27 @@ defmodule Cainophile.Adapters.Postgres do
       "Notifying subscribers: #{inspect(subscribers)} about transaction: #{inspect(txn)}"
     )
 
+    Logger.info("Notifying subscribers")
+
+    log_mailbox_size(self())
+
     for(sub <- subscribers, is_pid(sub), do: send(sub, txn)) ++
       for sub <- subscribers, is_function(sub), do: sub.(txn)
   end
 
   defp adapter_impl(config) do
     Keyword.get(config, :postgres_adapter, Cainophile.Adapters.Postgres.EpgsqlImplementation)
+  end
+
+  defp log_mailbox_size(pid) do
+    info = :erlang.process_info(pid, [:message_queue_len, :memory])
+    queue_len = Keyword.get(info, :message_queue_len, 0)
+
+    total_memory = Keyword.get(info, :memory, 0)
+
+    Logger.info(
+      "CAINOPHILE Mailbox size: #{queue_len} messages; Total memory: #{total_memory} bytes"
+    )
   end
 
   # Client

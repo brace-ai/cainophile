@@ -27,8 +27,8 @@ defmodule Cainophile.Adapters.Postgres.EpgsqlImplementation do
             slot_name,
             self(),
             [],
-            '#{xlog}/#{offset}',
-            'proto_version \'1\', publication_names \'#{publication_names}\''
+            ~c"#{xlog}/#{offset}",
+            ~c"proto_version '1', publication_names '#{publication_names}'"
           )
 
         {:ok, %State{config: config, connection: epgsql_pid}}
